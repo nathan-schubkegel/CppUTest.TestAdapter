@@ -1,0 +1,21 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <Description>Test adapter for discovering and running tests from CppUTest *.vcxproj exe projects in Visual Studio's Test Explorer.</Description>
+    <Authors>Nathan Schubkegel</Authors>
+    <Company>Nathan Schubkegel</Company>
+    <Copyright>This is free and unencumbered software released into the public domain. For more information, please refer to https://unlicense.org</Copyright>
+    <PackageProjectUrl>https://github.com/nathan-schubkegel/Schuub.CppUTest.TestAdapter</PackageProjectUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.TestPlatform.ObjectModel" Version="17.9.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\"/>
+  </ItemGroup>
+
+</Project>

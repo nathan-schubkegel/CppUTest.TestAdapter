@@ -1,2 +1,19 @@
-# CppUTest.TestAdapter
-A Visual Studio test adapter for CppUTest
+# Schuub's CppUTest Adapter for Visual Studio
+If you have written your C/C++ tests using [CppUTest](https://cpputest.github.io/)
+
+Then you are unable to run your tests via Visual Studio's Test Explorer window... until now!
+
+(insert happy image here)
+
+
+Usage
+---
+I don't know yet.
+
+Development
+---
+The project is currently built with Visual Studio 2022.
+
+Licensing
+---
+The contents of this repo are free and unencumbered software released into the public domain under The Unlicense. You have complete freedom to do anything you want with the software, for any purpose. Please refer to <http://unlicense.org/> .
