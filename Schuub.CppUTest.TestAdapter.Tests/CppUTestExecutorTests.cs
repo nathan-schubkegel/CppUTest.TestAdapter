@@ -32,7 +32,7 @@ namespace Schuub.CppUTest.TestAdapter.Tests
       CppUTestDiscoverer.LearnTestCases(assemblyPath,
         logger: (level, message) => logMessages.Add($"{level}: {message}"),
         testCases.Add,
-        cancelToken: CancellationToken.None);
+        cancelToken: new CancelSignal());
 
       Assert.That(logMessages, Is.EqualTo(new[]
       {
@@ -42,13 +42,14 @@ namespace Schuub.CppUTest.TestAdapter.Tests
       // Then try to run them
       logMessages.Clear();
       var recordMessages = new List<string>();
-      new CppUTestExecutor().RunTests(testCases,
+      CppUTestExecutor.RunTests(testCases,
         logger: (level, message) => logMessages.Add($"{level}: {message}"),
         isBeingDebugged: false,
         launchProcessWithDebuggerAttached: null,
         recordStart: (testCase) => recordMessages.Add($"RecordStart: {Path.GetFileName(testCase.Source)} - {testCase.FullyQualifiedName}"),
         recordEnd: (testCase, outcome) => recordMessages.Add($"RecordEnd: {Path.GetFileName(testCase.Source)} - {testCase.FullyQualifiedName} - {outcome}"),
-        recordResult: (testResult) => recordMessages.Add($"RecordResult: {Path.GetFileName(testResult.TestCase.Source)} - {testResult.TestCase.FullyQualifiedName} - {testResult.Outcome} - {testResult.ErrorMessage}")
+        recordResult: (testResult) => recordMessages.Add($"RecordResult: {Path.GetFileName(testResult.TestCase.Source)} - {testResult.TestCase.FullyQualifiedName} - {testResult.Outcome} - {testResult.ErrorMessage}"),
+        new CancelSignal()
       );
 
       Assert.That(logMessages, Is.Empty);

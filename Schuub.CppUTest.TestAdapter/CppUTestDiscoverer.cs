@@ -44,12 +44,12 @@ namespace Schuub.CppUTest.TestAdapter
             continue;
           }
 
-          using (var cancelSource = new CancellationTokenSource(5000))
+          using (var cancelSource = new CancelSignal().CancelAfterTimeout(5000))
           {
             LearnTestCases(sourceAssembly,
               (level, message) => logger.SendMessage(level, message),
               (testCase) => discoverySink.SendTestCase(testCase),
-              cancelToken: cancelSource.Token);
+              cancelToken: cancelSource);
           }
         }
         catch (Exception ex)
@@ -65,7 +65,7 @@ namespace Schuub.CppUTest.TestAdapter
     public static void LearnTestCases(string sourceAssembly,
       Action<TestMessageLevel, string> logger,
       Action<TestCase> discoverySink,
-      CancellationToken cancelToken)
+      CancelSignal cancelToken)
     {
       var assemblyFileName = Path.GetFileName(sourceAssembly);
 
@@ -73,7 +73,7 @@ namespace Schuub.CppUTest.TestAdapter
       // and released in v3.7
       string procOutput = RunProcessAndCollectOutupt(sourceAssembly, "-ln", cancelToken);
 
-      var testCases = new List<(string FullName, string GroupName, string TestName)>();
+      var testCaseFullNames = new List<string>();
       if (string.IsNullOrEmpty(procOutput?.Trim()))
       {
         logger(TestMessageLevel.Informational, $"No tests found in {assemblyFileName}");
@@ -87,21 +87,21 @@ namespace Schuub.CppUTest.TestAdapter
         {
           throw new InvalidDataException($"Unsupported format of test name \"{name}\" reported by {assemblyFileName}");
         }
-        testCases.Add((name, parts[0], parts[1]));
+        testCaseFullNames.Add(name);
       }
 
-      if (testCases.Count == 0)
+      if (testCaseFullNames.Count == 0)
       {
         logger(TestMessageLevel.Informational, $"No tests found in {assemblyFileName}");
         return;
       }
 
-      foreach (var testCase in testCases)
+      foreach (var fullName in testCaseFullNames)
       {
-        discoverySink(new TestCase(testCase.FullName, CppUTestExecutor.ExecutorUri, sourceAssembly));
+        discoverySink(new TestCase(fullName, CppUTestExecutor.ExecutorUri, sourceAssembly));
       }
 
-      logger(TestMessageLevel.Informational, $"Discovered {testCases.Count} tests in {assemblyFileName}");
+      logger(TestMessageLevel.Informational, $"Discovered {testCaseFullNames.Count} tests in {assemblyFileName}");
     }
 
     /// <summary>
@@ -109,7 +109,7 @@ namespace Schuub.CppUTest.TestAdapter
     /// Gives up early and kills the process if the cancel token becomes signaled.
     /// </summary>
     /// <returns>The process's standard output.</returns>
-    private static string RunProcessAndCollectOutupt(string exeFilePath, string arguments, CancellationToken cancelToken)
+    private static string RunProcessAndCollectOutupt(string exeFilePath, string arguments, CancelSignal cancelToken)
     {
       var startInfo = new ProcessStartInfo(exeFilePath, arguments)
       {

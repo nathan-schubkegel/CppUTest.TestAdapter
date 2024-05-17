@@ -15,7 +15,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading;
-using System.Threading.Tasks;
 using System.Xml.Linq;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Adapter;
@@ -43,67 +42,102 @@ namespace Schuub.CppUTest.TestAdapter
 
     public static readonly Uri ExecutorUri = new Uri(ExecutorUriString);
 
-    private TaskCompletionSource<object> _cancelSource = new TaskCompletionSource<object>();
+    private List<CancelSignal> _cancelSources = new List<CancelSignal>();
 
     public void Cancel()
     {
-      _cancelSource.TrySetCanceled();
+      lock (_cancelSources)
+      {
+        foreach (var item in _cancelSources)
+        {
+          item.Cancel();
+        }
+      }
     }
 
     public void RunTests(IEnumerable<TestCase> tests, IRunContext runContext, IFrameworkHandle frameworkHandle)
     {
-      RunTests(tests.ToList(), frameworkHandle.SendMessage, runContext.IsBeingDebugged,
-        frameworkHandle.LaunchProcessWithDebuggerAttached,
-        frameworkHandle.RecordStart,
-        frameworkHandle.RecordEnd,
-        frameworkHandle.RecordResult);
+      using (var cancelSource = new CancelSignal())
+      {
+        lock (_cancelSources)
+        {
+          _cancelSources.Add(cancelSource);
+        }
+        try
+        {
+          RunTests(tests.ToList(), frameworkHandle.SendMessage, runContext.IsBeingDebugged,
+            frameworkHandle.LaunchProcessWithDebuggerAttached,
+            frameworkHandle.RecordStart,
+            frameworkHandle.RecordEnd,
+            frameworkHandle.RecordResult,
+            cancelSource);
+        }
+        catch
+        {
+          lock (_cancelSources)
+          {
+            _cancelSources.Remove(cancelSource);
+          }
+        }
+      }
     }
 
     public void RunTests(IEnumerable<string> sources, IRunContext runContext, IFrameworkHandle frameworkHandle)
     {
-      var testCases = new List<TestCase>();
-
-      foreach (var sourceAssembly in sources)
+      using (var cancelSource = new CancelSignal())
       {
-        if (!CppUTestDiscoverer.IsCppUTestExe(sourceAssembly))
+        lock (_cancelSources)
         {
-          continue;
+          _cancelSources.Add(cancelSource);
         }
-
-        using (var cancelSource = new CancellationTokenSource())
+        try
         {
-          _cancelSource.Task.ContinueWith(_ => cancelSource.Cancel());
-          
-          CppUTestDiscoverer.LearnTestCases(sourceAssembly,
-            frameworkHandle.SendMessage,
-            (testCase) => testCases.Add(testCase),
-            cancelToken: cancelSource.Token);
+          // discover the tests in those sources
+          var testCases = new List<TestCase>();
+          foreach (var sourceAssembly in sources)
+          {
+            cancelSource.ThrowIfCancellationRequested();
+
+            if (!CppUTestDiscoverer.IsCppUTestExe(sourceAssembly))
+            {
+              continue;
+            }
+
+            CppUTestDiscoverer.LearnTestCases(sourceAssembly,
+              frameworkHandle.SendMessage,
+              (testCase) => testCases.Add(testCase),
+              cancelToken: cancelSource);
+          }
+
+          RunTests(testCases, frameworkHandle.SendMessage, runContext.IsBeingDebugged,
+            frameworkHandle.LaunchProcessWithDebuggerAttached,
+            frameworkHandle.RecordStart,
+            frameworkHandle.RecordEnd,
+            frameworkHandle.RecordResult,
+            cancelSource);
         }
-
-        if (testCases.Count == 0)
+        finally
         {
-          continue;
+          lock (_cancelSources)
+          {
+            _cancelSources.Remove(cancelSource);
+          }
         }
       }
-
-      RunTests(testCases, frameworkHandle.SendMessage, runContext.IsBeingDebugged,
-        frameworkHandle.LaunchProcessWithDebuggerAttached,
-        frameworkHandle.RecordStart,
-        frameworkHandle.RecordEnd,
-        frameworkHandle.RecordResult);
     }
 
     /// <summary>
     /// Runs the given test cases, which might be from different assemblies.
     /// </summary>
-    public void RunTests(
+    public static void RunTests(
       List<TestCase> allTests, 
       Action<TestMessageLevel, string> logger,
       bool isBeingDebugged,
       LaunchProcessWithDebuggerAttachedDelegate launchProcessWithDebuggerAttached,
       Action<TestCase> recordStart, 
       Action<TestCase, TestOutcome> recordEnd, 
-      Action<TestResult> recordResult)
+      Action<TestResult> recordResult,
+      CancelSignal cancelToken)
     {
       foreach (var testsInSource in allTests.GroupBy(x => x.Source))
       {
@@ -126,9 +160,10 @@ namespace Schuub.CppUTest.TestAdapter
               launchProcessWithDebuggerAttached: isBeingDebugged ? launchProcessWithDebuggerAttached : null,
               filePath: assemblyFilePath,
               workingDirectory: tempDirPath,
-              arguments: "-ojunit");
+              arguments: "-ojunit",
+              cancelToken: cancelToken);
 
-            foreach (var xmlFilePath in Directory.EnumerateFiles(tempDirPath, "*.xml"))
+            foreach (var xmlFilePath in Directory.GetFiles(tempDirPath, "*.xml"))
             {
               foreach (var testResult in ReadTestResults(xmlFilePath, testCasesByFullName))
               {
@@ -211,12 +246,15 @@ namespace Schuub.CppUTest.TestAdapter
     /// </summary>
     /// <param name="launchProcessWithDebuggerAttached">If not null, then this delegate should be
     /// used to launch the process.</param>
-    private void RunProcess(
+    private static void RunProcess(
       LaunchProcessWithDebuggerAttachedDelegate launchProcessWithDebuggerAttached, 
       string filePath, 
       string workingDirectory, 
-      string arguments)
+      string arguments,
+      CancelSignal cancelToken)
     {
+      cancelToken.ThrowIfCancellationRequested();
+
       Process proc = null;
       try
       {
@@ -241,10 +279,12 @@ namespace Schuub.CppUTest.TestAdapter
           proc = Process.Start(startInfo);
         }
 
-        while (!proc.HasExited && !_cancelSource.Task.IsCompleted)
+        while (!proc.HasExited && !cancelToken.IsCancellationRequested)
         {
           Thread.Sleep(100);
         }
+
+        cancelToken.ThrowIfCancellationRequested();
       }
       finally
       {
