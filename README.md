@@ -1,14 +1,14 @@
 # Schuub's CppUTest Adapter for Visual Studio
 If you have written your C/C++ tests using [CppUTest](https://cpputest.github.io/)
 
-Then you are unable to run your tests via Visual Studio's Test Explorer window... until now!
+Then you are unable to run your tests via Visual Studio's Test Explorer window... until ~~now!~~ someday!
 
 (insert happy image here)
 
 
 Usage
 ---
-I don't know yet.
+I don't know yet. I thought this was a great idea, then never finished it.
 
 Development
 ---
